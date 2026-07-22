@@ -86,6 +86,7 @@ else
 fi
 
 echo -e "${YELLOW}正在安装依赖...${NC}"
+rm -rvf node_modules
 pnpm install
 
 echo -e "${YELLOW}正在构建项目...${NC}"
