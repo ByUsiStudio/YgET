@@ -9,7 +9,7 @@ interface ClickPoint {
 export default function CaptchaWidget() {
   const [status, setStatus] = useState<'idle' | 'clicking' | 'verifying' | 'success' | 'error'>('idle');
   const [challengeId, setChallengeId] = useState<string>('');
-  const [imageUrl, setImageUrl] = useState<string>('');
+  const [imageData, setImageData] = useState<string>('');
   const [targetCount, setTargetCount] = useState(3);
   const [clickedPoints, setClickedPoints] = useState<ClickPoint[]>([]);
   const [message, setMessage] = useState('点击图片中显示的目标位置完成验证');
@@ -34,10 +34,10 @@ export default function CaptchaWidget() {
 
       if (data.success) {
         setChallengeId(data.challengeId);
-        setImageUrl(data.imageUrl);
-        setTargetCount(data.targets);
+        setImageData(data.imageData);
+        setTargetCount(data.targetCount);
         setStatus('clicking');
-        setMessage(`请点击图片中的 ${data.targets} 个目标位置`);
+        setMessage(`请按顺序点击图片中的 ${data.targetCount} 个目标`);
       } else {
         setMessage('加载验证码失败');
       }
@@ -52,19 +52,37 @@ export default function CaptchaWidget() {
   }, []);
 
   const handleImageClick = (e: React.MouseEvent) => {
-    if (status !== 'clicking' || !imageRef.current || !containerRef.current) return;
+    if (status !== 'clicking' || !imageRef.current) return;
 
     const imageRect = imageRef.current.getBoundingClientRect();
-    const x = e.clientX - imageRect.left;
-    const y = e.clientY - imageRect.top;
+    const scaleX = 400 / imageRect.width;
+    const scaleY = 300 / imageRect.height;
+    
+    const x = (e.clientX - imageRect.left) * scaleX;
+    const y = (e.clientY - imageRect.top) * scaleY;
 
-    const newPoints = [...clickedPoints, { x, y }];
-    setClickedPoints(newPoints);
+    const tolerance = 25;
+    const existingIndex = clickedPoints.findIndex(point => {
+      const distance = Math.sqrt(
+        Math.pow(point.x - x, 2) +
+        Math.pow(point.y - y, 2)
+      );
+      return distance <= tolerance;
+    });
 
-    if (newPoints.length >= targetCount) {
-      verifyCaptcha(newPoints);
+    if (existingIndex >= 0) {
+      const newPoints = clickedPoints.filter((_, index) => index !== existingIndex);
+      setClickedPoints(newPoints);
+      setMessage(`已选择 ${newPoints.length}/${targetCount} 个目标`);
     } else {
-      setMessage(`已点击 ${newPoints.length}/${targetCount} 个目标`);
+      const newPoints = [...clickedPoints, { x, y }];
+      setClickedPoints(newPoints);
+      
+      if (newPoints.length >= targetCount) {
+        verifyCaptcha(newPoints);
+      } else {
+        setMessage(`已选择 ${newPoints.length}/${targetCount} 个目标`);
+      }
     }
   };
 
@@ -113,7 +131,7 @@ export default function CaptchaWidget() {
   const handleClear = () => {
     if (status === 'clicking') {
       setClickedPoints([]);
-      setMessage(`请点击图片中的 ${targetCount} 个目标位置`);
+      setMessage(`请按顺序点击图片中的 ${targetCount} 个目标`);
     }
   };
 
@@ -129,12 +147,12 @@ export default function CaptchaWidget() {
                 : ''
             }`}
           >
-            {imageUrl ? (
+            {imageData ? (
               <img
                 ref={imageRef}
-                src={imageUrl}
+                src={imageData}
                 alt="验证码图片"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-pointer"
                 onClick={handleImageClick}
               />
             ) : (
@@ -171,14 +189,17 @@ export default function CaptchaWidget() {
             {clickedPoints.map((point, index) => (
               <div
                 key={index}
-                className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${point.x}px`, top: `${point.y}px` }}
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20"
+                style={{ 
+                  left: `${(point.x / 400) * 100}%`, 
+                  top: `${(point.y / 300) * 100}%` 
+                }}
               >
                 <div className="relative">
-                  <div className="w-8 h-8 rounded-full border-2 border-blue-500 bg-blue-500/30 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center">
                     <span className="text-white text-xs font-bold">{index + 1}</span>
                   </div>
-                  <div className="absolute inset-0 w-8 h-8 rounded-full border-2 border-blue-500 animate-ping" />
+                  <div className="absolute inset-0 w-8 h-8 rounded-full border-2 border-green-500 animate-ping" />
                 </div>
               </div>
             ))}

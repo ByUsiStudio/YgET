@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import axios from 'axios';
+import { createCanvas, loadImage } from 'canvas';
 
 const router = Router();
 
@@ -7,7 +8,7 @@ interface CaptchaChallenge {
   id: string;
   type: 'click';
   siteKey: string;
-  imageUrl: string;
+  imageData: string;
   targets: Array<{ x: number; y: number }>;
   createdAt: Date;
   expiresAt: Date;
@@ -41,21 +42,93 @@ const imageSources = [
   'https://picsum.photos/400/300?random=5',
   'https://picsum.photos/400/300?random=6',
   'https://picsum.photos/400/300?random=7',
+  'https://picsum.photos/400/300?random=8',
+  'https://picsum.photos/400/300?random=9',
+  'https://picsum.photos/400/300?random=10',
+  'https://picsum.photos/400/300?random=11',
+  'https://picsum.photos/400/300?random=12',
+  'https://picsum.photos/400/300?random=13',
+  'https://picsum.photos/400/300?random=14',
+  'https://picsum.photos/400/300?random=15',
+  'https://picsum.photos/400/300?random=16',
+  'https://picsum.photos/400/300?random=17',
 ];
 
 function getRandomImageUrl(): string {
   return imageSources[Math.floor(Math.random() * imageSources.length)];
 }
 
-function generateRandomTargets(count: number = 3): Array<{ x: number; y: number }> {
+function generateSpacedTargets(count: number = 3, width: number = 400, height: number = 300): Array<{ x: number; y: number }> {
   const targets: Array<{ x: number; y: number }> = [];
+  const minDistance = 80;
+  const padding = 60;
+
   for (let i = 0; i < count; i++) {
-    targets.push({
-      x: Math.floor(Math.random() * 300) + 50,
-      y: Math.floor(Math.random() * 200) + 50,
-    });
+    let attempts = 0;
+    let newTarget: { x: number; y: number };
+
+    do {
+      newTarget = {
+        x: Math.floor(Math.random() * (width - padding * 2)) + padding,
+        y: Math.floor(Math.random() * (height - padding * 2)) + padding,
+      };
+      attempts++;
+    } while (
+      attempts < 50 &&
+      targets.some(target => {
+        const distance = Math.sqrt(
+          Math.pow(newTarget.x - target.x, 2) +
+          Math.pow(newTarget.y - target.y, 2)
+        );
+        return distance < minDistance;
+      })
+    );
+
+    targets.push(newTarget);
   }
+
   return targets;
+}
+
+async function downloadImage(url: string): Promise<Buffer> {
+  const response = await axios.get(url, {
+    responseType: 'arraybuffer',
+  });
+  return Buffer.from(response.data, 'binary');
+}
+
+async function composeImageWithTargets(imageBuffer: Buffer, targets: Array<{ x: number; y: number }>): Promise<string> {
+  const img = await loadImage(imageBuffer);
+  const canvas = createCanvas(img.width, img.height);
+  const ctx = canvas.getContext('2d');
+
+  ctx.drawImage(img, 0, 0);
+
+  targets.forEach((target, index) => {
+    const radius = 18;
+    
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+    ctx.fill();
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius + 6, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${index + 1}`, target.x, target.y);
+  });
+
+  return canvas.toDataURL('image/png');
 }
 
 router.post('/generate', async (req: Request, res: Response) => {
@@ -69,29 +142,40 @@ router.post('/generate', async (req: Request, res: Response) => {
     });
   }
 
-  const challengeId = generateId();
-  const imageUrl = getRandomImageUrl();
-  const targets = generateRandomTargets(3);
+  try {
+    const challengeId = generateId();
+    const imageUrl = getRandomImageUrl();
+    const imageBuffer = await downloadImage(imageUrl);
+    const targets = generateSpacedTargets(3, 400, 300);
+    const imageData = await composeImageWithTargets(imageBuffer, targets);
 
-  const challenge: CaptchaChallenge = {
-    id: challengeId,
-    type: 'click',
-    siteKey,
-    imageUrl,
-    targets,
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-  };
+    const challenge: CaptchaChallenge = {
+      id: challengeId,
+      type: 'click',
+      siteKey,
+      imageData,
+      targets,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    };
 
-  challenges.set(challengeId, challenge);
+    challenges.set(challengeId, challenge);
 
-  res.json({
-    success: true,
-    challengeId,
-    imageUrl,
-    targets: targets.length,
-    expiresAt: challenge.expiresAt.toISOString(),
-  });
+    res.json({
+      success: true,
+      challengeId,
+      imageData,
+      targetCount: targets.length,
+      expiresAt: challenge.expiresAt.toISOString(),
+    });
+  } catch (error) {
+    console.error('Failed to generate captcha:', error);
+    res.status(500).json({
+      success: false,
+      message: '生成验证码失败',
+      code: 'CAPTCHA_GENERATION_ERROR',
+    });
+  }
 });
 
 router.post('/verify', (req: Request, res: Response) => {
@@ -124,7 +208,7 @@ router.post('/verify', (req: Request, res: Response) => {
     });
   }
 
-  const tolerance = 30;
+  const tolerance = 25;
   const matchedTargets: number[] = [];
 
   for (const target of challenge.targets) {
