@@ -90,10 +90,7 @@ export default function Home() {
                 </div>
                 <div className="p-6">
                   <CodeBlock
-                    code={`# 安装 YgET Widget
-npm install @yget/widget
-
-# 验证 Token
+                    code={`# 验证 Token
 curl -X POST http://localhost:3001/api/captcha/verify/token \\
   -H "Content-Type: application/json" \\
   -d '{
