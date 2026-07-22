@@ -1,5 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Check, RefreshCw, Loader2, Target } from 'lucide-react';
+
+interface TargetPoint {
+  x: number;
+  y: number;
+}
 
 interface ClickPoint {
   x: number;
@@ -10,11 +15,62 @@ export default function CaptchaWidget() {
   const [status, setStatus] = useState<'idle' | 'clicking' | 'verifying' | 'success' | 'error'>('idle');
   const [challengeId, setChallengeId] = useState<string>('');
   const [imageData, setImageData] = useState<string>('');
-  const [targetCount, setTargetCount] = useState(3);
+  const [targets, setTargets] = useState<TargetPoint[]>([]);
   const [clickedPoints, setClickedPoints] = useState<ClickPoint[]>([]);
   const [message, setMessage] = useState('点击图片中显示的目标位置完成验证');
+  const [composedImageData, setComposedImageData] = useState<string>('');
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const composeImage = useCallback(async (baseImageData: string, targetPoints: TargetPoint[]) => {
+    return new Promise<string>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          resolve(baseImageData);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0);
+
+        targetPoints.forEach((target, index) => {
+          const radius = 18;
+          
+          ctx.beginPath();
+          ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+          ctx.fill();
+          ctx.strokeStyle = '#3b82f6';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(target.x, target.y, radius + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 20px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${index + 1}`, target.x, target.y);
+        });
+
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => {
+        resolve(baseImageData);
+      };
+      img.src = baseImageData;
+    });
+  }, []);
 
   const fetchChallenge = async () => {
     setStatus('idle');
@@ -35,9 +91,13 @@ export default function CaptchaWidget() {
       if (data.success) {
         setChallengeId(data.challengeId);
         setImageData(data.imageData);
-        setTargetCount(data.targetCount);
+        setTargets(data.targets);
+        
+        const composed = await composeImage(data.imageData, data.targets);
+        setComposedImageData(composed);
+        
         setStatus('clicking');
-        setMessage(`请按顺序点击图片中的 ${data.targetCount} 个目标`);
+        setMessage(`请按顺序点击图片中的 ${data.targets.length} 个目标`);
       } else {
         setMessage('加载验证码失败');
       }
@@ -73,15 +133,15 @@ export default function CaptchaWidget() {
     if (existingIndex >= 0) {
       const newPoints = clickedPoints.filter((_, index) => index !== existingIndex);
       setClickedPoints(newPoints);
-      setMessage(`已选择 ${newPoints.length}/${targetCount} 个目标`);
+      setMessage(`已选择 ${newPoints.length}/${targets.length} 个目标`);
     } else {
       const newPoints = [...clickedPoints, { x, y }];
       setClickedPoints(newPoints);
       
-      if (newPoints.length >= targetCount) {
+      if (newPoints.length >= targets.length) {
         verifyCaptcha(newPoints);
       } else {
-        setMessage(`已选择 ${newPoints.length}/${targetCount} 个目标`);
+        setMessage(`已选择 ${newPoints.length}/${targets.length} 个目标`);
       }
     }
   };
@@ -131,7 +191,7 @@ export default function CaptchaWidget() {
   const handleClear = () => {
     if (status === 'clicking') {
       setClickedPoints([]);
-      setMessage(`请按顺序点击图片中的 ${targetCount} 个目标`);
+      setMessage(`请按顺序点击图片中的 ${targets.length} 个目标`);
     }
   };
 
@@ -147,10 +207,10 @@ export default function CaptchaWidget() {
                 : ''
             }`}
           >
-            {imageData ? (
+            {composedImageData ? (
               <img
                 ref={imageRef}
-                src={imageData}
+                src={composedImageData}
                 alt="验证码图片"
                 className="w-full h-full object-cover cursor-pointer"
                 onClick={handleImageClick}
@@ -246,11 +306,11 @@ export default function CaptchaWidget() {
                   status === 'success' ? 'bg-green-400' :
                   status === 'error' ? 'bg-red-400' : 'bg-gradient-to-r from-blue-400 to-light-400'
                 }`}
-                style={{ width: `${(clickedPoints.length / targetCount) * 100}%` }}
+                style={{ width: `${(clickedPoints.length / targets.length) * 100}%` }}
               />
             </div>
             <span className="text-xs text-gray-500">
-              {clickedPoints.length}/{targetCount}
+              {clickedPoints.length}/{targets.length}
             </span>
           </div>
 

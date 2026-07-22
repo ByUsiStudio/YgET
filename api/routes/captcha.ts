@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from 'express';
 import axios from 'axios';
-import { createCanvas, loadImage } from 'canvas';
 
 const router = Router();
 
@@ -42,16 +41,6 @@ const imageSources = [
   'https://picsum.photos/400/300?random=5',
   'https://picsum.photos/400/300?random=6',
   'https://picsum.photos/400/300?random=7',
-  'https://picsum.photos/400/300?random=8',
-  'https://picsum.photos/400/300?random=9',
-  'https://picsum.photos/400/300?random=10',
-  'https://picsum.photos/400/300?random=11',
-  'https://picsum.photos/400/300?random=12',
-  'https://picsum.photos/400/300?random=13',
-  'https://picsum.photos/400/300?random=14',
-  'https://picsum.photos/400/300?random=15',
-  'https://picsum.photos/400/300?random=16',
-  'https://picsum.photos/400/300?random=17',
 ];
 
 function getRandomImageUrl(): string {
@@ -90,45 +79,12 @@ function generateSpacedTargets(count: number = 3, width: number = 400, height: n
   return targets;
 }
 
-async function downloadImage(url: string): Promise<Buffer> {
+async function downloadImage(url: string): Promise<string> {
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
   });
-  return Buffer.from(response.data, 'binary');
-}
-
-async function composeImageWithTargets(imageBuffer: Buffer, targets: Array<{ x: number; y: number }>): Promise<string> {
-  const img = await loadImage(imageBuffer);
-  const canvas = createCanvas(img.width, img.height);
-  const ctx = canvas.getContext('2d');
-
-  ctx.drawImage(img, 0, 0);
-
-  targets.forEach((target, index) => {
-    const radius = 18;
-    
-    ctx.beginPath();
-    ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
-    ctx.fill();
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(target.x, target.y, radius + 6, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${index + 1}`, target.x, target.y);
-  });
-
-  return canvas.toDataURL('image/png');
+  const buffer = Buffer.from(response.data, 'binary');
+  return `data:image/png;base64,${buffer.toString('base64')}`;
 }
 
 router.post('/generate', async (req: Request, res: Response) => {
@@ -145,9 +101,8 @@ router.post('/generate', async (req: Request, res: Response) => {
   try {
     const challengeId = generateId();
     const imageUrl = getRandomImageUrl();
-    const imageBuffer = await downloadImage(imageUrl);
+    const imageData = await downloadImage(imageUrl);
     const targets = generateSpacedTargets(3, 400, 300);
-    const imageData = await composeImageWithTargets(imageBuffer, targets);
 
     const challenge: CaptchaChallenge = {
       id: challengeId,
@@ -165,7 +120,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       success: true,
       challengeId,
       imageData,
-      targetCount: targets.length,
+      targets,
       expiresAt: challenge.expiresAt.toISOString(),
     });
   } catch (error) {
