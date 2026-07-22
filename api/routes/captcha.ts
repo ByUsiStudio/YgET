@@ -164,25 +164,29 @@ router.post('/verify', (req: Request, res: Response) => {
   }
 
   const tolerance = 25;
-  const matchedTargets: number[] = [];
+  let allMatched = true;
 
-  for (const target of challenge.targets) {
-    for (let i = 0; i < userInput.length; i++) {
-      if (matchedTargets.includes(i)) continue;
-      
-      const distance = Math.sqrt(
-        Math.pow(userInput[i].x - target.x, 2) +
-        Math.pow(userInput[i].y - target.y, 2)
-      );
-      
-      if (distance <= tolerance) {
-        matchedTargets.push(i);
-        break;
-      }
+  for (let i = 0; i < challenge.targets.length; i++) {
+    if (i >= userInput.length) {
+      allMatched = false;
+      break;
+    }
+
+    const target = challenge.targets[i];
+    const userPoint = userInput[i];
+
+    const distance = Math.sqrt(
+      Math.pow(userPoint.x - target.x, 2) +
+      Math.pow(userPoint.y - target.y, 2)
+    );
+
+    if (distance > tolerance) {
+      allMatched = false;
+      break;
     }
   }
 
-  if (matchedTargets.length === challenge.targets.length) {
+  if (allMatched && userInput.length === challenge.targets.length) {
     const token = generateToken();
     const verificationToken: VerificationToken = {
       id: generateId(),
