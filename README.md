@@ -23,6 +23,18 @@
 
 ## 快速开始
 
+### 脚本安装
+
+- **Github**安装
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ByUsiStudio/YgET/master/scripts/install.sh)"
+```
+
+- **Gitee**安装
+```bash
+bash -c "$(curl -fsSL https://gitee.com/byusistudio/YgET/raw/master/scripts/install.sh)"
+```
+
 ### 安装依赖
 
 ```bash
