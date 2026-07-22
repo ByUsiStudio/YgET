@@ -8,7 +8,7 @@ import axios from 'axios';
 /**
  * start server with port
  */
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 
 function getLocalIPs(): string[] {
   const interfaces = os.networkInterfaces();
